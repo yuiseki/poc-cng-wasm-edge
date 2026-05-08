@@ -315,6 +315,15 @@
         <span class="ep-lat" id="l-fgb-parse-esa"></span>
       </div>
     </div>
+
+    <div class="section-label">Phase 4C — Spatial Query + GeoJSON</div>
+    <div class="ep-card" onclick="probe('/fgb-geojson', onFgbGeojson)">
+      <div class="ep-path">GET /fgb-geojson</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-fgb-geojson">—</span>
+        <span class="ep-lat" id="l-fgb-geojson"></span>
+      </div>
+    </div>
   </div>
 
   <!-- ── Center: Map ── -->
@@ -335,6 +344,10 @@
       <div class="fgb-kv"><span class="fgb-k">crs</span><span class="fgb-v" id="fgb-c-crs">—</span></div>
       <div class="fgb-kv"><span class="fgb-k">envelope</span><span class="fgb-v" id="fgb-c-env">—</span></div>
       <div class="fgb-kv"><span class="fgb-k">index size</span><span class="fgb-v" id="fgb-c-idx">—</span></div>
+    </div>
+    <div id="fgb-geojson-card" class="fgb-card" style="display:none">
+      <div class="fgb-card-title" style="color:#3fb950">Phase 4C — Vector overlay (countries.fgb)</div>
+      <div id="fgb-geojson-info" style="color:#8b949e;font-size:10px;line-height:1.6">—</div>
     </div>
     <div id="fgb-esa-card" class="fgb-card" style="display:none">
       <div class="fgb-card-title">ESA WorldCover grid composites (S3)</div>
@@ -510,6 +523,7 @@ async function testAll() {
     ['/remote-tilejson', onTilejson],
     ['/fgb-parse', onFgbParse],
     ['/fgb-parse-esa', onFgbParseEsa],
+    ['/fgb-geojson', onFgbGeojson],
   ];
   for (const [p, cb] of endpoints) {
     await probe(p, cb);
@@ -578,6 +592,9 @@ function onTilejson(data, path) {
   const shortUrl = tileUrl.replace(/\{[zxy]\}/g, '*');
   document.getElementById('map-info').innerHTML +=
     `<br>tiles: <span style="color:#3fb950">${shortUrl}</span>`;
+
+  // Auto-overlay vector features on top of the satellite tiles
+  probe('/fgb-geojson', onFgbGeojson);
 }
 
 // Phase 4B: FlatGeobuf parse callbacks
@@ -611,8 +628,6 @@ function onFgbParse(data) {
 function onFgbParseEsa(data) {
   document.getElementById('fgb-esa-card').style.display = '';
   populateFgbCard('e', data);
-
-  // Draw ESA extent in orange
   if (data.envelope) {
     drawBoundsLayer('fgb-esa', data.envelope, '#e3b341', 0.06, 'ESA WorldCover envelope');
     const info = document.getElementById('map-info');
@@ -620,6 +635,70 @@ function onFgbParseEsa(data) {
       `<br><b style="color:#e3b341">ESA WorldCover</b> — ${data.features_count?.toLocaleString()} ${data.geometry_type_name} grid tiles<br>` +
       `<span style="color:#8b949e">CRS: ${data.crs?.org}:${data.crs?.code}</span>`;
   }
+}
+
+function countCoords(geom) {
+  if (!geom) return 0;
+  const flatten = arr => Array.isArray(arr[0]) ? arr.flatMap(flatten) : arr;
+  const coords = geom.type === 'MultiPolygon' ? geom.coordinates.flat(3)
+               : geom.type === 'Polygon'      ? geom.coordinates.flat(2)
+               : [];
+  return Math.floor(coords.length / 2);
+}
+
+// Phase 4C: overlay country polygon on satellite imagery
+function onFgbGeojson(data) {
+  if (!data || data.type !== 'FeatureCollection') return;
+  const features = data.features || [];
+  if (!features.length) return;
+
+  // Add/update GeoJSON source
+  if (map.getSource('fgb-vector-src')) {
+    map.getSource('fgb-vector-src').setData(data);
+  } else {
+    map.addSource('fgb-vector-src', { type: 'geojson', data });
+    // Semi-transparent fill — shows satellite under the polygon
+    map.addLayer({
+      id: 'fgb-vector-fill', type: 'fill', source: 'fgb-vector-src',
+      paint: { 'fill-color': '#3fb950', 'fill-opacity': 0.15 }
+    });
+    // Bright outline so the boundary is clearly visible over COG tiles
+    map.addLayer({
+      id: 'fgb-vector-line', type: 'line', source: 'fgb-vector-src',
+      paint: { 'line-color': '#3fb950', 'line-width': 2.5 }
+    });
+  }
+
+  // Zoom to the COG bounds so satellite + vector overlay are both visible
+  map.fitBounds([[-4.179823, 5.174968], [-3.824387, 5.531216]], { padding: 40, duration: 800 });
+
+  // Tooltip on hover
+  map.on('mouseenter', 'fgb-vector-fill', (e) => {
+    map.getCanvas().style.cursor = 'pointer';
+    const props = e.features[0]?.properties || {};
+    document.getElementById('map-info').innerHTML =
+      `<b style="color:#3fb950">Vector overlay</b> — FlatGeobuf countries.fgb<br>` +
+      Object.entries(props).map(([k,v]) => `${k}: <b>${v}</b>`).join(' | ');
+  });
+  map.on('mouseleave', 'fgb-vector-fill', () => {
+    map.getCanvas().style.cursor = '';
+  });
+
+  const names = features.map(f => f.properties?.name || '?').join(', ');
+  document.getElementById('fgb-geojson-card').style.display = '';
+  document.getElementById('fgb-geojson-info').innerHTML =
+    `matched: <b style="color:#3fb950">${features.length}</b> feature(s)<br>` +
+    features.map(f => {
+      const p = f.properties || {};
+      const coordCount = countCoords(f.geometry);
+      return `<b>${p.name || p.id || '?'}</b> (${f.geometry.type}, ${coordCount} coords)`;
+    }).join('<br>') +
+    `<br>source: ${data.metadata?.source?.split('/').pop() || 'countries.fgb'}<br>` +
+    `bbox: [${data.metadata?.bbox?.map(v=>v.toFixed(2)).join(', ')}]`;
+  document.getElementById('map-info').innerHTML =
+    `<b style="color:#3fb950">Vector overlay</b> — ${features.length} feature(s): ${names}<br>` +
+    `<span style="color:#8b949e">source: countries.fgb (FlatGeobuf) via Wasm Range requests</span><br>` +
+    `<span style="color:#8b949e">bbox: ${data.metadata?.bbox?.map(v=>v.toFixed(3)).join(', ')}</span>`;
 }
 </script>
 </body>
