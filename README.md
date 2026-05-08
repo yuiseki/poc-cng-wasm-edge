@@ -35,15 +35,18 @@ while containers and specialized servers handle the heavy data plane?
 | 2 | Outbound HTTP — fetch remote metadata via `allowed_outbound_hosts` | **DONE** |
 | 3A | GitHub Pages visual dashboard — MapLibre map + PerformanceResourceTiming panel | **DONE** |
 | 3B | TileJSON raster overlay — connect Wasm control-plane to COG tile data-plane | **DONE** |
-| 4 | PMTiles header reader — introspect a small `.pmtiles` archive | planned |
-| 5 | COG info / policy endpoint — routing logic, not pixel reads | planned |
+| 4A | FlatGeobuf header introspection — HTTP Range requests to remote FGB files | **DONE** |
+| 4B | FlatBuffers binary parse — pure Rust, zero external crates, feature count + schema | **DONE** |
+| 4C | Spatial query + GeoJSON decode — R-tree leaf scan, bbox filter, vector overlay on COG | **DONE** |
 
 ## Functions
 
 ### metadata-function (`spin/metadata-function/`)
 
-Phase 0+1+2 function. Serves static metadata from JSON bundled at compile time via `include_str!`,
-and fetches remote metadata via Spin's capability-scoped outbound HTTP.
+Phase 0+1+2+4C function. Serves static metadata from JSON bundled at compile time via `include_str!`,
+fetches remote metadata via Spin's capability-scoped outbound HTTP, and performs FlatGeobuf spatial
+queries against remote FGB files using HTTP Range requests — all in pure Rust with zero external crates
+beyond `spin-sdk` and `anyhow`.
 Exposed via Cloudflare Tunnel at `https://oceania.yuiseki.net`.
 
 ```
@@ -55,8 +58,54 @@ GET /env             selected runtime environment info
 GET /capabilities    outbound HTTP capability declaration (Phase 2)
 GET /remote-metadata fetch metadata.json from GitHub raw (Phase 2)
 GET /remote-tilejson fetch tilejson.json from GitHub raw (Phase 2)
+GET /fgb-parse       FlatGeobuf header parse: countries.fgb (179 features, MultiPolygon, EPSG:4326)
+GET /fgb-parse-esa   FlatGeobuf header parse: ESA WorldCover grid (19363 tiles, Polygon, EPSG:4326)
+GET /fgb-geojson     spatial query on countries.fgb for COG bbox: returns Ivory Coast GeoJSON
 OPTIONS /*           CORS preflight — Timing-Allow-Origin: * for PerformanceResourceTiming
 ```
+
+#### Phase 4C: FlatGeobuf spatial query + GeoJSON decode + vector overlay
+
+The `/fgb-geojson` endpoint demonstrates the key result of Phase 4:
+
+1. Two HTTP Range requests fetch the FlatGeobuf header from a remote FGB file
+2. A pure-Rust FlatBuffers parser (no external crates) extracts feature count, geometry type, column schema, and R-tree index size
+3. A single Range request fetches all R-tree leaf nodes (features_count × 40 bytes)
+4. Each leaf is tested against a query bbox — matching features are fetched by offset
+5. MultiPolygon + property data is decoded to a GeoJSON `FeatureCollection`
+6. The GitHub Pages dashboard overlays the result on COG satellite imagery via MapLibre
+
+```
+GitHub Pages → GET /fgb-geojson?bbox=... (Spin Wasm)
+                 ↓ GeoJSON FeatureCollection (Ivory Coast polygon)
+             → MapLibre adds GeoJSON source + fill/line layers on top of COG raster
+```
+
+This demonstrates that Wasm edge functions can execute lightweight spatial queries — R-tree
+traversal, bbox intersection, binary format decode — without containers or GDAL.
+
+```
+allowed_outbound_hosts = [
+  "https://raw.githubusercontent.com",               # FlatGeobuf countries.fgb
+  "https://esa-worldcover.s3.eu-central-1.amazonaws.com",  # ESA WorldCover FGB
+]
+```
+
+#### Phase 4A/4B: FlatGeobuf and FlatBuffers binary parse
+
+The `/fgb-parse` and `/fgb-parse-esa` endpoints parse the FlatGeobuf binary format
+using only two HTTP Range requests:
+
+- Request 1: bytes 0-11 — magic header (`8 bytes`) + `header_size` (`u32`)
+- Request 2: bytes 12-(12+header_size-1) — FlatBuffers-encoded `Header` table
+
+The FlatBuffers reader is implemented from scratch (no `flatbuffers` crate):
+vtable offsets, field reads, vector reads, string reads, nested table reads.
+
+Key lesson: `vtable_pos = table_pos - soffset` (soffset is **positive** when vtable precedes table).
+
+ESA WorldCover FGB schema discovered via `/fgb-parse-esa`:
+`tile`, `s1_vvvhratio_2020`, `s1_vvvhratio_2021`, `s2_rgbnir_2020/2021`, `s2_ndvi_2020/2021`, `s2_swir_2020/2021` (all String).
 
 #### Phase 3: GitHub Pages visual and performance dashboard
 
@@ -64,11 +113,11 @@ OPTIONS /*           CORS preflight — Timing-Allow-Origin: * for PerformanceRe
 
 ```
 Left panel:   Spin endpoint selector + per-endpoint status / latency badges
-Center map:   MapLibre GL JS — draws metadata bounds polygon, loads TileJSON raster overlay
+Center map:   MapLibre GL JS — COG satellite raster + FlatGeobuf vector overlay
 Right panel:  PerformanceResourceTiming table (total, TTFB, transferSize, nextHopProtocol)
 ```
 
-The `tilejson` endpoint now links the Wasm control-plane to the COG tile data-plane:
+The `tilejson` endpoint links the Wasm control-plane to the COG tile data-plane:
 
 ```
 GitHub Pages → GET /tilejson (Spin Wasm)
@@ -76,8 +125,7 @@ GitHub Pages → GET /tilejson (Spin Wasm)
              → MapLibre loads tiles from https://cog-tile.yuiseki.com
 ```
 
-This demonstrates the control plane / data plane separation the upper colleague described:
-Wasm returns TileJSON — tile pixels are served by a separate COG function.
+Wasm returns TileJSON — tile pixels are served by a separate COG function (FastAPI + rio-tiler on Knative).
 
 #### Phase 2: capability-scoped outbound HTTP
 
@@ -85,7 +133,10 @@ Spin denies outbound HTTP by default. Access is granted per-host in `spin.toml`:
 
 ```toml
 [component.metadata-function]
-allowed_outbound_hosts = ["https://raw.githubusercontent.com"]
+allowed_outbound_hosts = [
+  "https://raw.githubusercontent.com",
+  "https://esa-worldcover.s3.eu-central-1.amazonaws.com",
+]
 ```
 
 This makes the external dependencies of a Wasm function **inspectable from the manifest** —
