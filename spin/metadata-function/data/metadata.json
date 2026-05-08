@@ -1,0 +1,15 @@
+{
+  "name": "metadata-function",
+  "runtime": "Spin / Wasm",
+  "description": "Lightweight CNG metadata endpoint — Wasm edge function experiment",
+  "version": "0.1.0",
+  "phase": "Phase 0: basic Spin HTTP function",
+  "hypothesis": "Wasm edge functions can cover the lightweight control plane of CNG while containers handle the heavy data plane",
+  "endpoints": [
+    { "path": "/",         "description": "service info" },
+    { "path": "/healthz",  "description": "health check" },
+    { "path": "/metadata", "description": "this document" },
+    { "path": "/tilejson", "description": "sample TileJSON" },
+    { "path": "/env",      "description": "selected environment variables" }
+  ]
+}

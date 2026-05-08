@@ -1,0 +1,15 @@
+{
+  "tilejson": "2.2.0",
+  "name": "sample",
+  "description": "Sample TileJSON bundled inside Wasm component (no file I/O at request time)",
+  "version": "1.0.0",
+  "attribution": "",
+  "scheme": "xyz",
+  "tiles": [],
+  "minzoom": 10,
+  "maxzoom": 17,
+  "bounds": [-180, -85.051129, 180, 85.051129],
+  "center": [0, 0, 10],
+  "format": "png",
+  "note": "tiles URL is intentionally empty — this is a metadata-only endpoint"
+}
