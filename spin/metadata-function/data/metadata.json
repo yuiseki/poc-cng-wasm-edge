@@ -5,9 +5,9 @@
   "version": "0.1.0",
   "phase": "Phase 0+1+2: health / bundled files / capability-scoped outbound HTTP",
   "hypothesis": "Wasm edge functions can cover the lightweight control plane of CNG while containers handle the heavy data plane",
-  "bounds": [3.70, 5.10, 4.15, 5.60],
-  "center": [3.92, 5.35, 12],
-  "data_area": "Abidjan, Côte d'Ivoire (demo COG coverage)",
+  "bounds": [-4.179823, 5.174968, -3.824387, 5.531216],
+  "center": [-4.002105, 5.353092, 11],
+  "data_area": "Abidjan, Côte d'Ivoire (OpenAerialMap demo COG)",
   "endpoints": [
     { "path": "/",                "phase": 0, "description": "service info" },
     { "path": "/healthz",         "phase": 0, "description": "health check" },

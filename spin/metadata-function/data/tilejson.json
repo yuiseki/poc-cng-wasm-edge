@@ -9,9 +9,9 @@
     "https://cog-tile.yuiseki.com/tiles/{z}/{x}/{y}.png"
   ],
   "minzoom": 10,
-  "maxzoom": 17,
-  "bounds": [3.70, 5.10, 4.15, 5.60],
-  "center": [3.92, 5.35, 12],
+  "maxzoom": 19,
+  "bounds": [-4.179823, 5.174968, -3.824387, 5.531216],
+  "center": [-4.002105, 5.353092, 11],
   "format": "png",
   "data_plane": "https://cog-tile.yuiseki.com",
   "note": "Wasm returns TileJSON; tile pixels are served by a separate COG tile function — control plane / data plane separation"
