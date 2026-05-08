@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>poc-cng-wasm-edge — CNG Control Plane Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      background: #0d1117;
+      color: #e6edf3;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+      font-size: 12px;
+    }
+
+    /* ── header ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 14px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      flex-shrink: 0;
+    }
+    .header-title { color: #58a6ff; font-weight: bold; font-size: 13px; }
+    .header-sub { color: #8b949e; font-size: 11px; }
+    .header-spacer { flex: 1; }
+    #header-status { font-size: 11px; color: #8b949e; }
+
+    /* ── main layout ── */
+    .main {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── left panel ── */
+    .left-panel {
+      width: 260px;
+      min-width: 260px;
+      background: #161b22;
+      border-right: 1px solid #30363d;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .url-group { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+    .url-group label { font-size: 10px; color: #8b949e; text-transform: uppercase; letter-spacing: .07em; }
+    .url-group input {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      color: #e6edf3;
+      padding: 5px 7px;
+      font-family: inherit;
+      font-size: 11px;
+      border-radius: 4px;
+      width: 100%;
+    }
+    .url-group input:focus { outline: none; border-color: #58a6ff; }
+
+    .btn-all {
+      padding: 7px;
+      background: #238636;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      margin-bottom: 8px;
+      transition: background .15s;
+    }
+    .btn-all:hover { background: #2ea043; }
+    .btn-all:disabled { background: #1a3d24; color: #8b949e; cursor: not-allowed; }
+
+    .section-label {
+      font-size: 9px;
+      color: #6e7681;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      padding: 4px 2px 2px;
+      border-top: 1px solid #21262d;
+    }
+
+    .ep-card {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 4px;
+      padding: 6px 8px;
+      cursor: pointer;
+      transition: border-color .15s;
+    }
+    .ep-card:hover { border-color: #388bfd; }
+    .ep-path { color: #79c0ff; margin-bottom: 3px; font-size: 11px; }
+    .ep-row { display: flex; align-items: center; gap: 5px; }
+
+    .badge {
+      display: inline-block;
+      min-width: 28px;
+      text-align: center;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: bold;
+    }
+    .b-idle  { background: #21262d; color: #6e7681; }
+    .b-ok    { background: #1b4332; color: #3fb950; }
+    .b-err   { background: #4d1515; color: #f85149; }
+    .b-spin  { background: #1c2a45; color: #79c0ff; }
+    .ep-lat  { color: #6e7681; font-size: 10px; }
+
+    /* ── map ── */
+    .map-wrap { flex: 1; position: relative; min-width: 0; }
+    #map { width: 100%; height: 100%; }
+
+    .map-info {
+      position: absolute;
+      bottom: 30px;
+      left: 8px;
+      background: rgba(13,17,23,.88);
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 5px 9px;
+      font-size: 10px;
+      color: #8b949e;
+      pointer-events: none;
+      max-width: 340px;
+      line-height: 1.5;
+    }
+
+    /* ── right panel ── */
+    .right-panel {
+      width: 380px;
+      min-width: 300px;
+      background: #161b22;
+      border-left: 1px solid #30363d;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .panel-section-title {
+      font-size: 9px;
+      color: #6e7681;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      font-size: 9px;
+      color: #6e7681;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: 3px 5px;
+      text-align: left;
+      border-bottom: 1px solid #30363d;
+    }
+    tbody td {
+      padding: 4px 5px;
+      border-bottom: 1px solid #161b22;
+      vertical-align: middle;
+      font-size: 10px;
+    }
+    tr:last-child td { border-bottom: none; }
+    .td-path { color: #79c0ff; }
+    .td-ok   { color: #3fb950; }
+    .td-err  { color: #f85149; }
+    .td-dim  { color: #8b949e; }
+    .td-mono { font-family: inherit; }
+
+    #response-pre {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 4px;
+      padding: 8px;
+      font-size: 10px;
+      color: #8b949e;
+      overflow: auto;
+      max-height: 260px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="header-title">poc-cng-wasm-edge</span>
+  <span class="header-sub">CNG Control Plane Dashboard</span>
+  <span class="header-spacer"></span>
+  <span id="header-status">—</span>
+</header>
+
+<div class="main">
+
+  <!-- ── Left: endpoint panel ── -->
+  <div class="left-panel">
+    <div class="url-group">
+      <label>Spin Endpoint</label>
+      <input type="text" id="endpoint-url" value="https://oceania.yuiseki.net">
+    </div>
+
+    <button class="btn-all" id="btn-all" onclick="testAll()">▶ Test All Endpoints</button>
+
+    <div class="section-label">Phase 0 — Health</div>
+    <div class="ep-card" onclick="probe('/')">
+      <div class="ep-path">GET /</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-root">—</span>
+        <span class="ep-lat" id="l-root"></span>
+      </div>
+    </div>
+    <div class="ep-card" onclick="probe('/healthz')">
+      <div class="ep-path">GET /healthz</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-healthz">—</span>
+        <span class="ep-lat" id="l-healthz"></span>
+      </div>
+    </div>
+
+    <div class="section-label">Phase 1 — Bundled JSON</div>
+    <div class="ep-card" onclick="probe('/metadata', onMetadata)">
+      <div class="ep-path">GET /metadata</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-metadata">—</span>
+        <span class="ep-lat" id="l-metadata"></span>
+      </div>
+    </div>
+    <div class="ep-card" onclick="probe('/tilejson', onTilejson)">
+      <div class="ep-path">GET /tilejson</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-tilejson">—</span>
+        <span class="ep-lat" id="l-tilejson"></span>
+      </div>
+    </div>
+    <div class="ep-card" onclick="probe('/env')">
+      <div class="ep-path">GET /env</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-env">—</span>
+        <span class="ep-lat" id="l-env"></span>
+      </div>
+    </div>
+
+    <div class="section-label">Phase 2 — Outbound HTTP</div>
+    <div class="ep-card" onclick="probe('/capabilities')">
+      <div class="ep-path">GET /capabilities</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-capabilities">—</span>
+        <span class="ep-lat" id="l-capabilities"></span>
+      </div>
+    </div>
+    <div class="ep-card" onclick="probe('/remote-metadata', onMetadata)">
+      <div class="ep-path">GET /remote-metadata</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-remote-metadata">—</span>
+        <span class="ep-lat" id="l-remote-metadata"></span>
+      </div>
+    </div>
+    <div class="ep-card" onclick="probe('/remote-tilejson', onTilejson)">
+      <div class="ep-path">GET /remote-tilejson</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-remote-tilejson">—</span>
+        <span class="ep-lat" id="l-remote-tilejson"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Center: Map ── -->
+  <div class="map-wrap">
+    <div id="map"></div>
+    <div class="map-info" id="map-info">No data loaded — run tests to draw bounds</div>
+  </div>
+
+  <!-- ── Right: Performance + response ── -->
+  <div class="right-panel">
+    <div class="panel-section-title">Performance Metrics</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Endpoint</th>
+          <th>Status</th>
+          <th>Total</th>
+          <th>TTFB</th>
+          <th>Size</th>
+          <th>Proto</th>
+        </tr>
+      </thead>
+      <tbody id="perf-body">
+        <tr><td colspan="6" class="td-dim" style="text-align:center;padding:12px">—</td></tr>
+      </tbody>
+    </table>
+
+    <div class="panel-section-title">Last Response</div>
+    <pre id="response-pre">—</pre>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+// ── Map ───────────────────────────────────────────────────────────────────
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>'
+      }
+    },
+    layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+  },
+  center: [20, 5],
+  zoom: 2
+});
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+// ── State ─────────────────────────────────────────────────────────────────
+const perf = {};
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function baseUrl() {
+  return document.getElementById('endpoint-url').value.trim().replace(/\/$/, '');
+}
+
+function pathToId(p) {
+  return p.replace(/[^a-z0-9]/gi, '-').replace(/^-+|-+$/g, '') || 'root';
+}
+
+function setBadge(path, cls, label) {
+  const el = document.getElementById('b-' + pathToId(path));
+  if (!el) return;
+  el.className = 'badge ' + cls;
+  el.textContent = label;
+}
+
+function setLatency(path, ms) {
+  const el = document.getElementById('l-' + pathToId(path));
+  if (el) el.textContent = ms != null ? ms + 'ms' : '';
+}
+
+function fmtBytes(n) {
+  if (n == null) return '—';
+  if (n === 0) return '0 (cache)';
+  return n < 1024 ? n + 'B' : (n / 1024).toFixed(1) + 'KB';
+}
+
+function getResourceTiming(url) {
+  const es = performance.getEntriesByName(url, 'resource');
+  if (!es.length) return null;
+  const e = es[es.length - 1];
+  return {
+    total: Math.round(e.responseEnd - e.fetchStart),
+    ttfb:  Math.round(e.responseStart - e.requestStart),
+    size:  e.transferSize,
+    proto: e.nextHopProtocol || '?'
+  };
+}
+
+function renderPerfTable() {
+  const rows = Object.values(perf);
+  if (!rows.length) return;
+  const tbody = document.getElementById('perf-body');
+  tbody.innerHTML = rows.map(r => {
+    const cls = typeof r.status === 'number' && r.status >= 200 && r.status < 300
+      ? 'td-ok' : r.status === '—' ? 'td-dim' : 'td-err';
+    return `<tr>
+      <td class="td-path td-mono">${r.path}</td>
+      <td class="${cls}">${r.status}</td>
+      <td class="td-mono">${r.total != null ? r.total + 'ms' : '—'}</td>
+      <td class="td-mono">${r.ttfb  != null ? r.ttfb  + 'ms' : '—'}</td>
+      <td class="td-mono">${fmtBytes(r.size)}</td>
+      <td class="td-dim td-mono">${r.proto || '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Core fetch ────────────────────────────────────────────────────────────
+async function probe(path, callback) {
+  const url = baseUrl() + path;
+  setBadge(path, 'b-spin', '…');
+  const t0 = performance.now();
+  try {
+    const resp = await fetch(url);
+    const total = Math.round(performance.now() - t0);
+    const data = await resp.json().catch(() => null);
+    const rt = getResourceTiming(url);
+
+    setBadge(path, resp.ok ? 'b-ok' : 'b-err', String(resp.status));
+    setLatency(path, rt ? rt.total : total);
+
+    perf[path] = {
+      path,
+      status: resp.status,
+      total:  rt ? rt.total : total,
+      ttfb:   rt ? rt.ttfb  : null,
+      size:   rt ? rt.size  : null,
+      proto:  rt ? rt.proto : null,
+    };
+    renderPerfTable();
+
+    if (data) {
+      document.getElementById('response-pre').textContent =
+        JSON.stringify(data, null, 2).slice(0, 3000);
+    }
+    document.getElementById('header-status').textContent =
+      `${path} → ${resp.status} (${rt ? rt.total : total}ms)`;
+
+    if (callback && data) callback(data, path);
+
+  } catch (err) {
+    setBadge(path, 'b-err', 'ERR');
+    setLatency(path, null);
+    perf[path] = { path, status: 'ERR', total: null, ttfb: null, size: null, proto: null };
+    renderPerfTable();
+    document.getElementById('response-pre').textContent = String(err);
+    document.getElementById('header-status').textContent = `${path} — ${err.message}`;
+  }
+}
+
+async function testAll() {
+  const btn = document.getElementById('btn-all');
+  btn.disabled = true;
+  btn.textContent = '⏳ Testing…';
+  const endpoints = [
+    ['/', null],
+    ['/healthz', null],
+    ['/metadata', onMetadata],
+    ['/tilejson', onTilejson],
+    ['/env', null],
+    ['/capabilities', null],
+    ['/remote-metadata', onMetadata],
+    ['/remote-tilejson', onTilejson],
+  ];
+  for (const [p, cb] of endpoints) {
+    await probe(p, cb);
+    await new Promise(r => setTimeout(r, 120));
+  }
+  btn.disabled = false;
+  btn.textContent = '▶ Test All Endpoints';
+}
+
+// ── Map callbacks ─────────────────────────────────────────────────────────
+function drawBounds(bounds, label) {
+  if (!bounds || !Array.isArray(bounds) || bounds.length < 4) return;
+  const [w, s, e, n] = bounds;
+  const geojson = {
+    type: 'Feature',
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[[w,s],[e,s],[e,n],[w,n],[w,s]]]
+    },
+    properties: {}
+  };
+  if (map.getSource('bounds-src')) {
+    map.getSource('bounds-src').setData(geojson);
+  } else {
+    map.addSource('bounds-src', { type: 'geojson', data: geojson });
+    map.addLayer({
+      id: 'bounds-fill', type: 'fill', source: 'bounds-src',
+      paint: { 'fill-color': '#388bfd', 'fill-opacity': 0.12 }
+    });
+    map.addLayer({
+      id: 'bounds-line', type: 'line', source: 'bounds-src',
+      paint: { 'line-color': '#388bfd', 'line-width': 2, 'line-dasharray': [4, 2] }
+    });
+  }
+  map.fitBounds([[w, s], [e, n]], { padding: 60, maxZoom: 14, duration: 800 });
+  document.getElementById('map-info').innerHTML =
+    `<b style="color:#79c0ff">${label}</b><br>` +
+    `bounds: [${bounds.map(v => (+v).toFixed(3)).join(', ')}]`;
+}
+
+function onMetadata(data, path) {
+  if (data.bounds) drawBounds(data.bounds, path);
+}
+
+function onTilejson(data, path) {
+  // Draw bounds
+  if (data.bounds) drawBounds(data.bounds, path);
+
+  // Add raster layer if tiles URL is present and not a placeholder
+  const tiles = data.tiles;
+  if (!tiles || !tiles.length) return;
+  const tileUrl = tiles[0];
+  if (!tileUrl || !tileUrl.includes('{z}')) return;
+
+  // Remove previous CNG tile layer if any
+  if (map.getLayer('cng-tile-layer')) map.removeLayer('cng-tile-layer');
+  if (map.getSource('cng-tile-src')) map.removeSource('cng-tile-src');
+
+  map.addSource('cng-tile-src', {
+    type: 'raster',
+    tiles: [tileUrl],
+    tileSize: 256,
+    minzoom: data.minzoom || 0,
+    maxzoom: data.maxzoom || 22,
+    attribution: data.attribution || ''
+  });
+  map.addLayer({
+    id: 'cng-tile-layer', type: 'raster', source: 'cng-tile-src',
+    paint: { 'raster-opacity': 0.85 }
+  });
+
+  const shortUrl = tileUrl.replace(/\{[zxy]\}/g, '*');
+  document.getElementById('map-info').innerHTML +=
+    `<br>tiles: <span style="color:#3fb950">${shortUrl}</span>`;
+}
+</script>
+</body>
+</html>

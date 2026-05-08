@@ -29,10 +29,22 @@ async fn handle(req: Request) -> anyhow::Result<impl IntoResponse> {
     };
     let path = path_with_query.split('?').next().unwrap_or("/").trim_end_matches('/');
 
+    // OPTIONS preflight — required for cross-origin requests from GitHub Pages.
+    if *req.method() == Method::Options {
+        return Ok(Response::builder()
+            .status(204)
+            .header("access-control-allow-origin", "*")
+            .header("access-control-allow-methods", "GET, OPTIONS")
+            .header("access-control-allow-headers", "Content-Type")
+            .header("timing-allow-origin", "*")
+            .body("")
+            .build());
+    }
+
     if *req.method() != Method::Get {
         return Ok(Response::builder()
             .status(405)
-            .header("allow", "GET")
+            .header("allow", "GET, OPTIONS")
             .body("")
             .build());
     }
@@ -80,6 +92,8 @@ async fn handle(req: Request) -> anyhow::Result<impl IntoResponse> {
         _ => Ok(Response::builder()
             .status(404)
             .header("content-type", "application/json")
+            .header("access-control-allow-origin", "*")
+            .header("timing-allow-origin", "*")
             .body(r#"{"error":"not found"}"#)
             .build()),
     }
@@ -97,6 +111,9 @@ async fn fetch_remote(url: &str) -> anyhow::Result<Response> {
                 .status(status)
                 .header("content-type", "application/json")
                 .header("access-control-allow-origin", "*")
+                .header("access-control-allow-methods", "GET, OPTIONS")
+                .header("access-control-allow-headers", "Content-Type")
+                .header("timing-allow-origin", "*")
                 .header("x-fetched-from", url)
                 .body(body)
                 .build())
@@ -122,6 +139,9 @@ fn json_response(status: u16, body: &str) -> Response {
         .status(status)
         .header("content-type", "application/json")
         .header("access-control-allow-origin", "*")
+        .header("access-control-allow-methods", "GET, OPTIONS")
+        .header("access-control-allow-headers", "Content-Type")
+        .header("timing-allow-origin", "*")
         .body(body.to_owned())
         .build()
 }

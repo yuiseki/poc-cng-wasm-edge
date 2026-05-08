@@ -33,8 +33,10 @@ while containers and specialized servers handle the heavy data plane?
 | 0 | Spin HTTP function up, `/healthz` + `/metadata` responding | **DONE** |
 | 1 | Bundled file access — serve `data/metadata.json` + `tilejson.json` from component | DONE (via `include_str!`) |
 | 2 | Outbound HTTP — fetch remote metadata via `allowed_outbound_hosts` | **DONE** |
-| 3 | PMTiles header reader — introspect a small `.pmtiles` archive | planned |
-| 4 | COG info / policy endpoint — routing logic, not pixel reads | planned |
+| 3A | GitHub Pages visual dashboard — MapLibre map + PerformanceResourceTiming panel | **DONE** |
+| 3B | TileJSON raster overlay — connect Wasm control-plane to COG tile data-plane | **DONE** |
+| 4 | PMTiles header reader — introspect a small `.pmtiles` archive | planned |
+| 5 | COG info / policy endpoint — routing logic, not pixel reads | planned |
 
 ## Functions
 
@@ -42,17 +44,40 @@ while containers and specialized servers handle the heavy data plane?
 
 Phase 0+1+2 function. Serves static metadata from JSON bundled at compile time via `include_str!`,
 and fetches remote metadata via Spin's capability-scoped outbound HTTP.
+Exposed via Cloudflare Tunnel at `https://oceania.yuiseki.net`.
 
 ```
 GET /                service info
 GET /healthz         health check
-GET /metadata        bundled data/metadata.json
-GET /tilejson        bundled data/tilejson.json
+GET /metadata        bundled data/metadata.json  (includes bounds + endpoint list)
+GET /tilejson        bundled TileJSON linking to cog-tile data-plane
 GET /env             selected runtime environment info
 GET /capabilities    outbound HTTP capability declaration (Phase 2)
 GET /remote-metadata fetch metadata.json from GitHub raw (Phase 2)
 GET /remote-tilejson fetch tilejson.json from GitHub raw (Phase 2)
+OPTIONS /*           CORS preflight — Timing-Allow-Origin: * for PerformanceResourceTiming
 ```
+
+#### Phase 3: GitHub Pages visual and performance dashboard
+
+`docs/index.html` — static dashboard published on GitHub Pages.
+
+```
+Left panel:   Spin endpoint selector + per-endpoint status / latency badges
+Center map:   MapLibre GL JS — draws metadata bounds polygon, loads TileJSON raster overlay
+Right panel:  PerformanceResourceTiming table (total, TTFB, transferSize, nextHopProtocol)
+```
+
+The `tilejson` endpoint now links the Wasm control-plane to the COG tile data-plane:
+
+```
+GitHub Pages → GET /tilejson (Spin Wasm)
+                 ↓ tiles URL
+             → MapLibre loads tiles from https://cog-tile.yuiseki.com
+```
+
+This demonstrates the control plane / data plane separation the upper colleague described:
+Wasm returns TileJSON — tile pixels are served by a separate COG function.
 
 #### Phase 2: capability-scoped outbound HTTP
 

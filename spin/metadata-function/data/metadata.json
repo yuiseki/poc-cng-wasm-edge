@@ -3,13 +3,19 @@
   "runtime": "Spin / Wasm",
   "description": "Lightweight CNG metadata endpoint — Wasm edge function experiment",
   "version": "0.1.0",
-  "phase": "Phase 0: basic Spin HTTP function",
+  "phase": "Phase 0+1+2: health / bundled files / capability-scoped outbound HTTP",
   "hypothesis": "Wasm edge functions can cover the lightweight control plane of CNG while containers handle the heavy data plane",
+  "bounds": [3.70, 5.10, 4.15, 5.60],
+  "center": [3.92, 5.35, 12],
+  "data_area": "Abidjan, Côte d'Ivoire (demo COG coverage)",
   "endpoints": [
-    { "path": "/",         "description": "service info" },
-    { "path": "/healthz",  "description": "health check" },
-    { "path": "/metadata", "description": "this document" },
-    { "path": "/tilejson", "description": "sample TileJSON" },
-    { "path": "/env",      "description": "selected environment variables" }
+    { "path": "/",                "phase": 0, "description": "service info" },
+    { "path": "/healthz",         "phase": 0, "description": "health check" },
+    { "path": "/metadata",        "phase": 1, "description": "this document (bundled)" },
+    { "path": "/tilejson",        "phase": 1, "description": "TileJSON linking to data-plane tiles (bundled)" },
+    { "path": "/env",             "phase": 1, "description": "selected runtime environment info" },
+    { "path": "/capabilities",    "phase": 2, "description": "outbound HTTP capability declaration" },
+    { "path": "/remote-metadata", "phase": 2, "description": "fetch metadata.json from GitHub raw" },
+    { "path": "/remote-tilejson", "phase": 2, "description": "fetch tilejson.json from GitHub raw" }
   ]
 }

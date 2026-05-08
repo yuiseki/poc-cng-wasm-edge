@@ -1,15 +1,18 @@
 {
   "tilejson": "2.2.0",
-  "name": "sample",
-  "description": "Sample TileJSON bundled inside Wasm component (no file I/O at request time)",
+  "name": "cng-cog-tile-demo",
+  "description": "TileJSON for COG raster tiles served by the cog-tile Knative function (poc-cng-cog-tile). Tile URL connects the Wasm control-plane to the container data-plane.",
   "version": "1.0.0",
-  "attribution": "",
+  "attribution": "© OpenStreetMap contributors",
   "scheme": "xyz",
-  "tiles": [],
+  "tiles": [
+    "https://cog-tile.yuiseki.com/tiles/{z}/{x}/{y}.png"
+  ],
   "minzoom": 10,
   "maxzoom": 17,
-  "bounds": [-180, -85.051129, 180, 85.051129],
-  "center": [0, 0, 10],
+  "bounds": [3.70, 5.10, 4.15, 5.60],
+  "center": [3.92, 5.35, 12],
   "format": "png",
-  "note": "tiles URL is intentionally empty — this is a metadata-only endpoint"
+  "data_plane": "https://cog-tile.yuiseki.com",
+  "note": "Wasm returns TileJSON; tile pixels are served by a separate COG tile function — control plane / data plane separation"
 }
