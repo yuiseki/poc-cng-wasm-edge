@@ -1,0 +1,29 @@
+{
+  "function": "metadata-function",
+  "runtime": "Spin / Wasm",
+  "phase": "Phase 2: capability-scoped outbound HTTP",
+  "outbound_model": {
+    "default": "deny",
+    "description": "Spin components cannot make outbound HTTP requests unless the target host is explicitly declared in spin.toml via `allowed_outbound_hosts`. This makes external dependencies of a CNG function inspectable from the manifest.",
+    "allowed_hosts": [
+      "https://raw.githubusercontent.com"
+    ]
+  },
+  "endpoints": {
+    "/remote-metadata": {
+      "source": "https://raw.githubusercontent.com/yuiseki/poc-cng-wasm-edge/main/spin/metadata-function/data/metadata.json",
+      "allowed": true
+    },
+    "/remote-tilejson": {
+      "source": "https://raw.githubusercontent.com/yuiseki/poc-cng-wasm-edge/main/spin/metadata-function/data/tilejson.json",
+      "allowed": true
+    }
+  },
+  "non_goals": [
+    "arbitrary URL proxy",
+    "full STAC client",
+    "PMTiles tile extraction",
+    "COG pixel reading",
+    "replacing Martin / DuckDB / GDAL"
+  ]
+}
