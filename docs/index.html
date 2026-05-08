@@ -160,6 +160,26 @@
       border-bottom: 1px solid #21262d;
     }
 
+    /* FlatGeobuf info card */
+    .fgb-card {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 4px;
+      padding: 8px 10px;
+      font-size: 10px;
+      line-height: 1.7;
+    }
+    .fgb-card-title {
+      color: #d2a8ff;
+      font-size: 11px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .fgb-kv { display: flex; gap: 6px; }
+    .fgb-k  { color: #6e7681; min-width: 90px; }
+    .fgb-v  { color: #e6edf3; }
+    .fgb-v-hi { color: #3fb950; font-weight: bold; }
+
     table { width: 100%; border-collapse: collapse; }
     thead th {
       font-size: 9px;
@@ -216,7 +236,7 @@
       <input type="text" id="endpoint-url" value="https://oceania.yuiseki.net">
     </div>
 
-    <button class="btn-all" id="btn-all" onclick="testAll()">▶ Test All Endpoints</button>
+    <button class="btn-all" id="btn-all" onclick="testAll()">&#9654; Test All Endpoints</button>
 
     <div class="section-label">Phase 0 — Health</div>
     <div class="ep-card" onclick="probe('/')">
@@ -279,6 +299,22 @@
         <span class="ep-lat" id="l-remote-tilejson"></span>
       </div>
     </div>
+
+    <div class="section-label">Phase 4B — FlatGeobuf Header Parse</div>
+    <div class="ep-card" onclick="probe('/fgb-parse', onFgbParse)">
+      <div class="ep-path">GET /fgb-parse</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-fgb-parse">—</span>
+        <span class="ep-lat" id="l-fgb-parse"></span>
+      </div>
+    </div>
+    <div class="ep-card" onclick="probe('/fgb-parse-esa', onFgbParseEsa)">
+      <div class="ep-path">GET /fgb-parse-esa</div>
+      <div class="ep-row">
+        <span class="badge b-idle" id="b-fgb-parse-esa">—</span>
+        <span class="ep-lat" id="l-fgb-parse-esa"></span>
+      </div>
+    </div>
   </div>
 
   <!-- ── Center: Map ── -->
@@ -287,8 +323,29 @@
     <div class="map-info" id="map-info">No data loaded — run tests to draw bounds</div>
   </div>
 
-  <!-- ── Right: Performance + response ── -->
+  <!-- ── Right: FlatGeobuf stats + Performance + response ── -->
   <div class="right-panel">
+
+    <div class="panel-section-title">FlatGeobuf Analysis (Phase 4B)</div>
+    <div id="fgb-countries-card" class="fgb-card" style="display:none">
+      <div class="fgb-card-title">countries.fgb (GitHub raw)</div>
+      <div class="fgb-kv"><span class="fgb-k">name</span><span class="fgb-v" id="fgb-c-name">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">geometry</span><span class="fgb-v" id="fgb-c-geom">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">features</span><span class="fgb-v fgb-v-hi" id="fgb-c-count">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">crs</span><span class="fgb-v" id="fgb-c-crs">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">envelope</span><span class="fgb-v" id="fgb-c-env">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">index size</span><span class="fgb-v" id="fgb-c-idx">—</span></div>
+    </div>
+    <div id="fgb-esa-card" class="fgb-card" style="display:none">
+      <div class="fgb-card-title">ESA WorldCover grid composites (S3)</div>
+      <div class="fgb-kv"><span class="fgb-k">name</span><span class="fgb-v" id="fgb-e-name">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">geometry</span><span class="fgb-v" id="fgb-e-geom">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">features</span><span class="fgb-v fgb-v-hi" id="fgb-e-count">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">crs</span><span class="fgb-v" id="fgb-e-crs">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">envelope</span><span class="fgb-v" id="fgb-e-env">—</span></div>
+      <div class="fgb-kv"><span class="fgb-k">index size</span><span class="fgb-v" id="fgb-e-idx">—</span></div>
+    </div>
+
     <div class="panel-section-title">Performance Metrics</div>
     <table>
       <thead>
@@ -451,6 +508,8 @@ async function testAll() {
     ['/capabilities', null],
     ['/remote-metadata', onMetadata],
     ['/remote-tilejson', onTilejson],
+    ['/fgb-parse', onFgbParse],
+    ['/fgb-parse-esa', onFgbParseEsa],
   ];
   for (const [p, cb] of endpoints) {
     await probe(p, cb);
@@ -461,34 +520,35 @@ async function testAll() {
 }
 
 // ── Map callbacks ─────────────────────────────────────────────────────────
-function drawBounds(bounds, label) {
+function drawBoundsLayer(layerId, bounds, color, opacity, label) {
   if (!bounds || !Array.isArray(bounds) || bounds.length < 4) return;
   const [w, s, e, n] = bounds;
   const geojson = {
     type: 'Feature',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[[w,s],[e,s],[e,n],[w,n],[w,s]]]
-    },
-    properties: {}
+    geometry: { type: 'Polygon', coordinates: [[[w,s],[e,s],[e,n],[w,n],[w,s]]] },
+    properties: { label }
   };
-  if (map.getSource('bounds-src')) {
-    map.getSource('bounds-src').setData(geojson);
+  const srcId = layerId + '-src';
+  if (map.getSource(srcId)) {
+    map.getSource(srcId).setData(geojson);
   } else {
-    map.addSource('bounds-src', { type: 'geojson', data: geojson });
+    map.addSource(srcId, { type: 'geojson', data: geojson });
     map.addLayer({
-      id: 'bounds-fill', type: 'fill', source: 'bounds-src',
-      paint: { 'fill-color': '#388bfd', 'fill-opacity': 0.12 }
+      id: layerId + '-fill', type: 'fill', source: srcId,
+      paint: { 'fill-color': color, 'fill-opacity': opacity }
     });
     map.addLayer({
-      id: 'bounds-line', type: 'line', source: 'bounds-src',
-      paint: { 'line-color': '#388bfd', 'line-width': 2, 'line-dasharray': [4, 2] }
+      id: layerId + '-line', type: 'line', source: srcId,
+      paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': [4, 2] }
     });
   }
-  map.fitBounds([[w, s], [e, n]], { padding: 60, maxZoom: 14, duration: 800 });
-  document.getElementById('map-info').innerHTML =
-    `<b style="color:#79c0ff">${label}</b><br>` +
-    `bounds: [${bounds.map(v => (+v).toFixed(3)).join(', ')}]`;
+}
+
+function drawBounds(bounds, label) {
+  drawBoundsLayer('cog-bounds', bounds, '#388bfd', 0.12, label);
+  map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { padding: 60, maxZoom: 14, duration: 800 });
+  const info = document.getElementById('map-info');
+  info.innerHTML = `<b style="color:#79c0ff">${label}</b><br>bounds: [${bounds.map(v => (+v).toFixed(3)).join(', ')}]`;
 }
 
 function onMetadata(data, path) {
@@ -496,19 +556,13 @@ function onMetadata(data, path) {
 }
 
 function onTilejson(data, path) {
-  // Draw bounds
   if (data.bounds) drawBounds(data.bounds, path);
-
-  // Add raster layer if tiles URL is present and not a placeholder
   const tiles = data.tiles;
   if (!tiles || !tiles.length) return;
   const tileUrl = tiles[0];
   if (!tileUrl || !tileUrl.includes('{z}')) return;
-
-  // Remove previous CNG tile layer if any
   if (map.getLayer('cng-tile-layer')) map.removeLayer('cng-tile-layer');
   if (map.getSource('cng-tile-src')) map.removeSource('cng-tile-src');
-
   map.addSource('cng-tile-src', {
     type: 'raster',
     tiles: [tileUrl],
@@ -521,10 +575,51 @@ function onTilejson(data, path) {
     id: 'cng-tile-layer', type: 'raster', source: 'cng-tile-src',
     paint: { 'raster-opacity': 0.85 }
   });
-
   const shortUrl = tileUrl.replace(/\{[zxy]\}/g, '*');
   document.getElementById('map-info').innerHTML +=
     `<br>tiles: <span style="color:#3fb950">${shortUrl}</span>`;
+}
+
+// Phase 4B: FlatGeobuf parse callbacks
+function populateFgbCard(prefix, data) {
+  document.getElementById('fgb-' + prefix + '-name').textContent  = data.name || '—';
+  document.getElementById('fgb-' + prefix + '-geom').textContent  = `${data.geometry_type_name} (${data.geometry_type})`;
+  document.getElementById('fgb-' + prefix + '-count').textContent = data.features_count?.toLocaleString() || '—';
+  document.getElementById('fgb-' + prefix + '-crs').textContent   = data.crs ? `${data.crs.org}:${data.crs.code} ${data.crs.name}` : '—';
+  document.getElementById('fgb-' + prefix + '-env').textContent   = data.envelope ? data.envelope.map(v => v.toFixed(2)).join(', ') : '—';
+  const idxKB = data.index_bytes_approx ? (data.index_bytes_approx / 1024).toFixed(1) + ' KB' : '—';
+  document.getElementById('fgb-' + prefix + '-idx').textContent   = `${idxKB} (node_size=${data.index_node_size})`;
+}
+
+function onFgbParse(data) {
+  document.getElementById('fgb-countries-card').style.display = '';
+  populateFgbCard('c', data);
+
+  // Draw world-extent envelope in purple
+  if (data.envelope) {
+    drawBoundsLayer('fgb-countries', data.envelope, '#d2a8ff', 0.06, 'countries.fgb envelope');
+    // Zoom out to world view to show the global extent
+    map.fitBounds([[-180, -85.6], [180, 83.6]], { padding: 40, duration: 800 });
+    const info = document.getElementById('map-info');
+    info.innerHTML =
+      `<b style="color:#d2a8ff">countries.fgb</b> — ${data.features_count} ${data.geometry_type_name} features<br>` +
+      `<span style="color:#8b949e">CRS: ${data.crs?.org}:${data.crs?.code} ${data.crs?.name}</span><br>` +
+      `envelope: [${data.envelope.map(v => v.toFixed(1)).join(', ')}]`;
+  }
+}
+
+function onFgbParseEsa(data) {
+  document.getElementById('fgb-esa-card').style.display = '';
+  populateFgbCard('e', data);
+
+  // Draw ESA extent in orange
+  if (data.envelope) {
+    drawBoundsLayer('fgb-esa', data.envelope, '#e3b341', 0.06, 'ESA WorldCover envelope');
+    const info = document.getElementById('map-info');
+    info.innerHTML +=
+      `<br><b style="color:#e3b341">ESA WorldCover</b> — ${data.features_count?.toLocaleString()} ${data.geometry_type_name} grid tiles<br>` +
+      `<span style="color:#8b949e">CRS: ${data.crs?.org}:${data.crs?.code}</span>`;
+  }
 }
 </script>
 </body>

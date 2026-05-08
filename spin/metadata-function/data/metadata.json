@@ -3,7 +3,7 @@
   "runtime": "Spin / Wasm",
   "description": "Lightweight CNG metadata endpoint — Wasm edge function experiment",
   "version": "0.1.0",
-  "phase": "Phase 0+1+2: health / bundled files / capability-scoped outbound HTTP",
+  "phase": "Phase 0+1+2+4B: health / bundled files / capability-scoped HTTP / FlatGeobuf header parse",
   "hypothesis": "Wasm edge functions can cover the lightweight control plane of CNG while containers handle the heavy data plane",
   "bounds": [-4.179823, 5.174968, -3.824387, 5.531216],
   "center": [-4.002105, 5.353092, 11],
@@ -16,6 +16,8 @@
     { "path": "/env",             "phase": 1, "description": "selected runtime environment info" },
     { "path": "/capabilities",    "phase": 2, "description": "outbound HTTP capability declaration" },
     { "path": "/remote-metadata", "phase": 2, "description": "fetch metadata.json from GitHub raw" },
-    { "path": "/remote-tilejson", "phase": 2, "description": "fetch tilejson.json from GitHub raw" }
+    { "path": "/remote-tilejson", "phase": 2, "description": "fetch tilejson.json from GitHub raw" },
+    { "path": "/fgb-parse",      "phase": 4, "description": "parse FlatGeobuf header via Range requests: countries.fgb (179 features, MultiPolygon, EPSG:4326)" },
+    { "path": "/fgb-parse-esa",  "phase": 4, "description": "parse FlatGeobuf header via Range requests: ESA WorldCover grid composites (19363 tiles, Polygon, EPSG:4326)" }
   ]
 }
